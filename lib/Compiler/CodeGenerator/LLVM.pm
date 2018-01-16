@@ -1,5 +1,5 @@
 package Compiler::CodeGenerator::LLVM;
-use v5.008_001;
+use 5.008_001;
 use strict;
 use warnings;
 use File::Basename qw/dirname/;

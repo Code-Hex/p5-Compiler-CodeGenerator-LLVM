@@ -1,34 +1,24 @@
 #define LLVM_ATTRIBUTE_READONLY
 
-#ifdef LLVM_VERSION_3_2
-
-#include "llvm/IRBuilder.h"
-#include "llvm/Module.h"
-#include "llvm/LLVMContext.h"
-#include "llvm/ValueSymbolTable.h"
-
-#else
-
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/ValueSymbolTable.h"
 #include "llvm/IR/DerivedTypes.h"
-
-#endif
-
-#include "llvm/PassManager.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/CodeGen/Passes.h"
+#include "llvm/IR/AssemblyAnnotationWriter.h"
+#include "llvm/Linker/Linker.h"
+#include "llvm/ExecutionEngine/ExecutionEngine.h"
+#include "llvm/ExecutionEngine/MCJIT.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Support/raw_os_ostream.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/TargetSelect.h"
-#include "llvm/Assembly/AssemblyAnnotationWriter.h"
 #include "llvm/IRReader/IRReader.h"
-#include "llvm/Linker.h"
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/Interpreter.h"
-#include "llvm/ExecutionEngine/JIT.h"
 #include "llvm/ExecutionEngine/GenericValue.h"
 #include <dirent.h>
 
@@ -168,7 +158,7 @@ public:
 class LLVM {
 public:
 	llvm::LLVMContext ctx;
-	llvm::Module *module;
+	std::unique_ptr<llvm::Module> module;
 	Enum::Runtime::Type cur_type;
 	llvm::Type *int_type;
 	llvm::Type *int_ptr_type;
@@ -269,7 +259,7 @@ public:
 	void storeArgument(llvm::IRBuilder<> *builder, Token *tk, llvm::Value *args, llvm::Value *idx, llvm::Value *value);
 	void setIteratorValue(llvm::IRBuilder<> *builder, Node *node);
 	void traverse(llvm::IRBuilder<> *builder, AST *ast);
-	bool linkModule(llvm::Module *dest, std::string filename);
+	bool linkModule(llvm::Module &dest, std::string filename);
 	void generateCode(llvm::IRBuilder<> *builder, Node *node);
 	llvm::BasicBlock *generateBlockCode(llvm::IRBuilder<> *builder, llvm::BasicBlock *block, llvm::BasicBlock *merge_block, Node *node);
 	void generateIfStmtCode(llvm::IRBuilder<> *builder, IfStmtNode *node);

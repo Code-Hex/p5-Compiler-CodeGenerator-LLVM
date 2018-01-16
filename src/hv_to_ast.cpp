@@ -265,6 +265,9 @@ Node *hv_to_node(pTHX_ SV *from_)
 
 AST *sv_to_ast(pTHX_ SV *from)
 {
-	Node *root = hv_to_node(aTHX_ from);
+	string pkg = string(pkgname(from));
+	if (from->sv_flags == 0 || pkg != "Compiler::Parser::AST") return NULL;
+	HV *ast = (HV *)cast(aTHX_ from, "Compiler::Parser::AST");
+	Node *root = hv_to_node(aTHX_ get_value(ast, "root"));
 	return new AST(root);
 }
