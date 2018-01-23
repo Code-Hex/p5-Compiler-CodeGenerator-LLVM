@@ -10,7 +10,7 @@ void print_object(FILE *fp, UnionType o)
 		fprintf(fp, "%d", (int)to_Int(o.o));
 		break;
 	case Double:
-		fprintf(fp, "%f", o.d);
+		fprintf(fp, "%g", o.d);
 		break;
 	case String:
 		fprintf(fp, "%s", (to_String(o.o))->s);
