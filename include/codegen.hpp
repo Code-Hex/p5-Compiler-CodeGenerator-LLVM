@@ -1,5 +1,9 @@
 #define LLVM_ATTRIBUTE_READONLY
 
+#include "llvm/Target/TargetOptions.h"
+#include "llvm/Support/TargetRegistry.h"
+#include "llvm/IR/DataLayout.h"
+
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
@@ -43,10 +47,6 @@ typedef enum {
 } Type;
 };
 };
-
-#define NaN       (0xFFF0000000000000)
-#define MASK      (0x00000000FFFFFFFF)
-#define _TYPE      (0x000F000000000000)
 
 #define NaN                (0xFFF0000000000000)
 #define MASK               (0x00000000FFFFFFFF)
@@ -206,10 +206,11 @@ public:
 	FunctionManager fmgr;
 	bool has_return_statement;
 	bool is_32bit;
+	bool is_emcc;
 	std::string runtime_api_path;
 	std::vector<const char *> library_paths;
 
-	LLVM(bool is_32bit, const char *runtime_api_path);
+	LLVM(bool is_32bit, bool is_emcc, const char *runtime_api_path);
 	void set_library_paths(std::vector<const char *> *paths);
 	void write(void);
 	void createRuntimeTypes(void);

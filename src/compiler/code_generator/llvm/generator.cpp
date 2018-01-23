@@ -9,9 +9,10 @@ using namespace std;
 namespace TokenType = Enum::Token::Type;
 namespace TokenKind = Enum::Token::Kind;
 
-LLVM::LLVM(bool _is_32bit, const char *_runtime_api_path) :
+LLVM::LLVM(bool _is_32bit, bool _is_emcc, const char *_runtime_api_path) :
 	last_evaluated_value(NULL), cur_pkg_name("main"),
-	has_return_statement(false), is_32bit(_is_32bit), runtime_api_path(_runtime_api_path)
+	has_return_statement(false), is_32bit(_is_32bit || _is_emcc), is_emcc(_is_emcc),
+	runtime_api_path(_runtime_api_path)
 {
 	module = llvm::make_unique<llvm::Module>("LLVMIR", ctx);
 	cur_args = NULL;
@@ -27,8 +28,10 @@ void LLVM::createRuntimeTypes(void)
 {
 	vector<Type *> fields;
 	void_type = llvm::Type::getVoidTy(ctx);
-	int_type = IntegerType::get(ctx, 64);
-	int32_type = IntegerType::get(ctx, 32);
+	//int_type = IntegerType::get(ctx, 64);
+	//int32_type = IntegerType::get(ctx, 32);
+	int32_type = Type::getInt32Ty(ctx);
+	int_type = (is_emcc) ? int32_type : Type::getInt64Ty(ctx);
 	double_type = Type::getDoubleTy(ctx);
 	boolean_type = llvm::Type::getInt1Ty(ctx);
 	Type *ptr_type = Type::getInt8PtrTy(ctx);
@@ -39,7 +42,7 @@ void LLVM::createRuntimeTypes(void)
 	value_type = void_ptr_type;
 
 	value_ptr_type = PointerType::get(value_type, 0);
-	fields.push_back(Type::getInt32Ty(ctx));
+	fields.push_back(int32_type);
 	fields.push_back(union_type);
 	object_type = StructType::create(ArrayRef<Type *>(fields), "Object", false);
 	array_ref_type = StructType::create(ArrayRef<Type *>(fields), "ArrayRef", false);
@@ -52,16 +55,16 @@ void LLVM::createRuntimeTypes(void)
 	object_ptr_type = PointerType::get(object_type, 0);
 	object_double_ptr_type = PointerType::get(object_ptr_type, 0);
 
-	fields.push_back(Type::getInt32Ty(ctx));
+	fields.push_back(int32_type);
 	fields.push_back(PointerType::get(PointerType::get(union_type, 0), 0));
 	//fields.push_back(PointerType::get(union_type, 0));
-	fields.push_back(Type::getInt64Ty(ctx));
+	fields.push_back(int_type);
 	array_type = StructType::create(ArrayRef<Type *>(fields), "ArrayObject");
 	array_ptr_type = PointerType::get(array_type, 0);
 
 	fields.clear();
 
-	fields.push_back(Type::getInt32Ty(ctx));
+	fields.push_back(int32_type);
 	fields.push_back(PointerType::get(union_type, 0));
 	fields.push_back(PointerType::get(void_ptr_type, 0));
 	fields.push_back(int_type);
@@ -70,7 +73,7 @@ void LLVM::createRuntimeTypes(void)
 
 	fields.clear();
 
-	fields.push_back(Type::getInt32Ty(ctx));
+	fields.push_back(int32_type);
 	fields.push_back(void_ptr_type);
 	fields.push_back(int_type);
 	fields.push_back(int_type);
@@ -80,12 +83,12 @@ void LLVM::createRuntimeTypes(void)
 	fields.clear();
 
 	code_ptr_type = PointerType::get(llvm::FunctionType::get(int_type, array_ptr_type, false), 0);
-	fields.push_back(Type::getInt32Ty(ctx));
+	fields.push_back(int32_type);
 	fields.push_back(code_ptr_type);
 	code_ref_type = StructType::create(ArrayRef<Type *>(fields), "CodeRefObject");
 	code_ref_ptr_type = PointerType::get(code_ref_type, 0);
 
-	fields.push_back(Type::getInt32Ty(ctx));
+	fields.push_back(int32_type);
 	fields.push_back(union_type);
 	fields.push_back(hash_ptr_type);
 	fields.push_back(void_ptr_type);
@@ -145,21 +148,21 @@ const char *LLVM::gen(AST *ast)
 
 	llvm::legacy::PassManager pm;
 	//pm.add(createPromoteMemoryToRegisterPass());
+/*
 	pm.add(createTailCallEliminationPass());
 	pm.add(createMemCpyOptPass());
 	pm.add(createCodeGenPreparePass());
 	pm.add(createIPSCCPPass());
 	pm.add(createFunctionInliningPass());
 	pm.run(*module);
-
+*/
 	std::string string;
 	llvm::raw_string_ostream rss(string);
 	rss << *module;
 	rss.flush();
 	const char *llvm_ir = string.c_str();
 	size_t ir_size = strlen(llvm_ir) + 1;
-	char *ret = (char *)malloc(ir_size);
-	memset(ret, 0, ir_size);
+	char *ret = (char *)calloc(1, ir_size);
 	strncpy(ret, llvm_ir, ir_size);
 	return ret;
 }
@@ -542,7 +545,7 @@ void LLVM::generateFunctionCode(IRBuilder<> *builder, FunctionNode *node)
 	cur_func = func;
 	cur_func_name = node->tk->data.c_str();
 	func->setCallingConv(CallingConv::Fast);
-	BasicBlock *entry = BasicBlock::Create(module->getContext(), "entrypoint", func);
+	BasicBlock *entry = BasicBlock::Create(ctx, "entrypoint", func);
 	entry_point = entry;
 	builder->SetInsertPoint(entry);
 
@@ -1331,42 +1334,57 @@ llvm::Value *LLVM::generateOperatorCodeWithObject(IRBuilder<> *builder,
 	string fname = "Object_" + string(func_name);
 	vector<llvm::Type *> arg_types;
 	llvm::Constant *f = NULL;
+	llvm::Type *ret_type;
+	if (is_emcc) {
+		ret_type = void_type;
+		arg_types.push_back(union_ptr_type);
+	} else {
+		ret_type = int_type;
+	}
+
 	if (left_type == Enum::Runtime::Value && right_type == Enum::Runtime::Value) {
 		arg_types.push_back(union_ptr_type);
 		arg_types.push_back(union_ptr_type);
 		llvm::ArrayRef<llvm::Type*> arg_types_ref(arg_types);
-		FunctionType *ftype = llvm::FunctionType::get(int_type, arg_types_ref, false);
+		FunctionType *ftype = llvm::FunctionType::get(ret_type, arg_types_ref, false);
 		f = module->getOrInsertFunction(fname + "Object", ftype);
 	} else if (left_type == Enum::Runtime::Value && right_type == Enum::Runtime::Int) {
 		arg_types.push_back(union_ptr_type);
 		arg_types.push_back(int_type);
 		llvm::ArrayRef<llvm::Type*> arg_types_ref(arg_types);
-		FunctionType *ftype = llvm::FunctionType::get(int_type, arg_types_ref, false);
+		FunctionType *ftype = llvm::FunctionType::get(ret_type, arg_types_ref, false);
 		f = module->getOrInsertFunction(fname + "Int", ftype);
 	} else if (left_type == Enum::Runtime::Int && right_type == Enum::Runtime::Value) {
 		arg_types.push_back(int_type);
 		arg_types.push_back(union_ptr_type);
 		llvm::ArrayRef<llvm::Type*> arg_types_ref(arg_types);
-		FunctionType *ftype = llvm::FunctionType::get(int_type, arg_types_ref, false);
+		FunctionType *ftype = llvm::FunctionType::get(ret_type, arg_types_ref, false);
 		f = module->getOrInsertFunction(fname + "Int2", ftype);
 	} else if (left_type == Enum::Runtime::Double && right_type == Enum::Runtime::Value) {
 		arg_types.push_back(double_type);
 		arg_types.push_back(union_ptr_type);
 		llvm::ArrayRef<llvm::Type*> arg_types_ref(arg_types);
-		FunctionType *ftype = llvm::FunctionType::get(int_type, arg_types_ref, false);
+		FunctionType *ftype = llvm::FunctionType::get(ret_type, arg_types_ref, false);
 		f = module->getOrInsertFunction(fname + "Double2", ftype);
 	} else if (left_type == Enum::Runtime::Value && right_type == Enum::Runtime::Double) {
 		arg_types.push_back(union_ptr_type);
 		arg_types.push_back(double_type);
 		llvm::ArrayRef<llvm::Type*> arg_types_ref(arg_types);
-		FunctionType *ftype = llvm::FunctionType::get(int_type, arg_types_ref, false);
+		FunctionType *ftype = llvm::FunctionType::get(ret_type, arg_types_ref, false);
 		f = module->getOrInsertFunction(fname + "Double", ftype);
 	} else {
 		assert(0 && "error");
 	}
+	cur_type = Enum::Runtime::Value;
+
+	if (is_emcc) {
+		AllocaInst *_ret = builder->CreateAlloca(union_type, 0, "object");
+		builder->CreateCall(f, {ret, left_value, right_value});
+		//return  generateReceiveUnionValueCode(builder, _ret);
+		return _ret;
+	}
 	CallInst *result = builder->CreateCall(f, {left_value, right_value}, "object");
 	ret = generateReceiveUnionValueCode(builder, result);
-	cur_type = Enum::Runtime::Value;
 	return ret;
 }
 
@@ -1600,6 +1618,14 @@ llvm::Value *LLVM::generateValueCode(IRBuilder<> *builder, Node *node)
 		//const Instruction &last_inst = entry_point->back();
 		//BasicBlock::InstListType &list = entry_point->getInstList();
 		//list.insert(list.end(), v);//inst);
+		if (is_emcc) {
+			Constant *integer = ConstantInt::get(int_type, (uint64_t)INT_init(ivalue));
+			llvm::Value *v = builder->CreateAlloca(union_type, 0, "ivalue");
+			builder->CreateStore(integer, builder->CreateBitCast(v, int_ptr_type, "union_to_int_ptr"));
+			cur_type = Enum::Runtime::Int;
+			ret = v;
+			break;
+		}
 		llvm::Value *v = builder->CreateAlloca(union_type, 0, "ivalue");
 		Constant *integer = ConstantInt::get(int_type, (uint64_t)INT_init(ivalue));
 		builder->CreateStore(integer, builder->CreateBitCast(v, int_ptr_type, "union_to_int_ptr"));
@@ -1812,7 +1838,14 @@ llvm::Value *LLVM::generateFunctionCallCode(IRBuilder<> *builder, FunctionCallNo
 			llvm::Value *handler = generateValueCode(builder, node->args->at(0));
 			result = builder->CreateCall(func, {handler, vargs}, "result");
 		} else {
-			result = builder->CreateCall(func, vargs, "result");
+			if (is_emcc) {
+				AllocaInst *_ret = builder->CreateAlloca(union_type, 0, "result");
+				_ret->setAlignment(8);
+				builder->CreateCall(func, {_ret, vargs});
+				result = _ret;
+			} else {
+				result = builder->CreateCall(func, vargs, "result");
+			}
 		}
 		if (name == "print" || name == "say"   || name == "shift" ||
 			name == "push"  || name == "bless" || name == "sqrt" ||
@@ -1820,7 +1853,7 @@ llvm::Value *LLVM::generateFunctionCallCode(IRBuilder<> *builder, FunctionCallNo
 			name == "sin"   || name == "cos"   || name == "atan2" ||
 			name == "open"  || name == "chr"   || name == "binmode" || name == "close" ||
 			name == "print_with_handler" || name == "Data::Dumper" || name == "IOS::init" || name == "IOS::store_ios_native_library") {
-			ret = generateReceiveUnionValueCode(builder, result);
+			ret = is_emcc ? result : generateReceiveUnionValueCode(builder, result);
 		} else {
 			ret = result;
 		}
@@ -1844,7 +1877,14 @@ Constant *LLVM::getBuiltinFunction(IRBuilder<> *builder, string name)
 		FunctionType *ftype = llvm::FunctionType::get(builder->getVoidTy(), value_type, false);
 		ret = module->getOrInsertFunction(name, ftype);
 	} else if (name == "print" || name == "say" || name == "shift" || name == "push" || name == "bless") {
-		FunctionType *ftype = llvm::FunctionType::get(int_type, array_ptr_type, false);
+		FunctionType *ftype;
+		if (is_emcc) {
+			arg_types.push_back(union_ptr_type);
+			arg_types.push_back(array_ptr_type);
+			ftype = llvm::FunctionType::get(void_type, arg_types, false);
+		} else {
+			ftype = llvm::FunctionType::get(int_type, array_ptr_type, false);
+		}
 		ret = module->getOrInsertFunction(name, ftype);
 		cur_type = Enum::Runtime::Value;
 	} else if (name == "print_with_handler") {
@@ -2006,11 +2046,20 @@ llvm::Value *LLVM::createNaNBoxingPtr(IRBuilder<> *builder, llvm::Value *_value,
 llvm::Value *LLVM::createString(IRBuilder<> *builder, const char *s)
 {
 	vector<llvm::Type *> arg_types;
+	if (is_emcc) {
+		arg_types.push_back(union_ptr_type);
+	}
 	arg_types.push_back(void_ptr_type);
 	llvm::ArrayRef<llvm::Type*> arg_types_ref(arg_types);
 	FunctionType *ftype = llvm::FunctionType::get(int_type, arg_types_ref, false);
 	llvm::Constant *f = module->getOrInsertFunction("new_String", ftype);
 	llvm::Value *str = builder->CreateGlobalStringPtr(s);
+	if (is_emcc) {
+		AllocaInst *_ret = builder->CreateAlloca(union_type, 0, "string");
+		_ret->setAlignment(8);
+		builder->CreateCall(f, {_ret, str});
+		return _ret;
+	}
 	CallInst *result = builder->CreateCall(f, str, "string");
 	return generateReceiveUnionValueCode(builder, result);
 }

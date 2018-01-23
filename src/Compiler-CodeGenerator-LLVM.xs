@@ -34,8 +34,9 @@ _new(classname, _options)
 CODE:
 {
 	bool is_32bit = SvPVX(get_value(_options, "32bit"));
+	bool is_emcc = SvPVX(get_value(_options, "emcc"));
 	const char *runtime_api_path = SvPVX(get_value(_options, "runtime_api_path"));
-	CodeGenerator::LLVM *code_generator = new CodeGenerator::LLVM(is_32bit, runtime_api_path);
+	CodeGenerator::LLVM *code_generator = new CodeGenerator::LLVM(is_32bit, is_emcc, runtime_api_path);
 	RETVAL = code_generator;
 }
 OUTPUT:
@@ -73,6 +74,7 @@ CODE:
 	int path_num = av_len(paths_);
 	if (path_num < 0) return;
 	std::vector<const char *> library_paths;
+	library_paths.reserve(path_num);
 	for (int i = 0; i <= path_num; i++) {
 		SV *path_ = (SV *)*av_fetch(paths_, i, FALSE);
 		const char *p = SvPVX(path_);
