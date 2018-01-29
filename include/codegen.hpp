@@ -206,10 +206,11 @@ public:
 	FunctionManager fmgr;
 	bool has_return_statement;
 	bool is_32bit;
+	bool is_emcc;
 	std::string runtime_api_path;
 	std::vector<const char *> library_paths;
 
-	LLVM(bool is_32bit, const char *runtime_api_path);
+	LLVM(bool is_32bit, bool is_emcc, const char *runtime_api_path);
 	void set_library_paths(std::vector<const char *> *paths);
 	void write(void);
 	void createRuntimeTypes(void);

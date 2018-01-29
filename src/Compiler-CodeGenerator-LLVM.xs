@@ -34,8 +34,9 @@ _new(classname, _options)
 CODE:
 {
 	bool is_32bit = SvPVX(get_value(_options, "32bit"));
+	bool is_emcc = SvPVX(get_value(_options, "emcc"));
 	const char *runtime_api_path = SvPVX(get_value(_options, "runtime_api_path"));
-	CodeGenerator::LLVM *code_generator = new CodeGenerator::LLVM(is_32bit, runtime_api_path);
+	CodeGenerator::LLVM *code_generator = new CodeGenerator::LLVM(is_32bit, is_emcc, runtime_api_path);
 	RETVAL = code_generator;
 }
 OUTPUT:
