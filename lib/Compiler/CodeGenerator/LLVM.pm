@@ -16,8 +16,6 @@ XSLoader::load('Compiler::CodeGenerator::LLVM', $VERSION);
 sub new {
     my ($class, $options) = @_;
     $options ||= +{};
-    my $lib_path = dirname(__FILE__) . '/LLVM/';
-    $options->{'32bit'} ||= 0;
     my $runtime_api_file = $class->runtime_file($options);
     $options->{runtime_api_path} ||= $runtime_api_file;
     $class->_new($options);

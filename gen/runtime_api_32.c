@@ -46,7 +46,7 @@ void print_object(FILE *fp, UnionType o)
 		break;
 	}
 }
-
+/*
 unsigned long long TYPE(uint64_t data)
 {
 	if (data >= UNDEF_TAG) {
@@ -79,3 +79,4 @@ unsigned long long TYPE(uint64_t data)
 		return Double;
 	}
 }
+*/

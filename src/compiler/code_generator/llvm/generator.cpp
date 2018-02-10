@@ -28,8 +28,8 @@ void LLVM::createRuntimeTypes(void)
 {
 	vector<Type *> fields;
 	void_type = llvm::Type::getVoidTy(ctx);
-	int_type = IntegerType::get(ctx, 64);
-	int32_type = IntegerType::get(ctx, 32);
+	int_type = Type::getInt64Ty(ctx);
+	int32_type = Type::getInt32Ty(ctx);
 	double_type = Type::getDoubleTy(ctx);
 	boolean_type = llvm::Type::getInt1Ty(ctx);
 	Type *ptr_type = Type::getInt8PtrTy(ctx);
@@ -1375,11 +1375,11 @@ llvm::Value *LLVM::generateOperatorCodeWithObject(IRBuilder<> *builder,
 	if (is_emcc) {
 		AllocaInst *_ret = builder->CreateAlloca(union_type, 0, "object");
 		builder->CreateCall(f, {_ret, left_value, right_value});
-		return _ret;
+		ret = _ret;
+	} else {
+		CallInst *result = builder->CreateCall(f, {left_value, right_value}, "object");
+		ret = generateReceiveUnionValueCode(builder, result);
 	}
-	CallInst *result = builder->CreateCall(f, {left_value, right_value}, "object");
-	ret = generateReceiveUnionValueCode(builder, result);
-	
 	return ret;
 }
 
@@ -1957,11 +1957,17 @@ Constant *LLVM::getBuiltinFunction(IRBuilder<> *builder, string name)
 llvm::Value *LLVM::createNaNBoxingInt(IRBuilder<> *builder, llvm::Value *value)
 {
 	llvm::Value *union_ptr = builder->CreateAlloca(union_type, 0, "int_ptr");
-	llvm::Value *mask = ConstantInt::get(int_type, MASK);
-	llvm::Value *nan = ConstantInt::get(int_type, NaN);
-	llvm::Value *int_tag = ConstantInt::get(int_type, INT_TAG);
-	llvm::Value *nan_boxing_ivalue = builder->CreateOr(builder->CreateOr(builder->CreateAnd(value, mask, "and"), nan, "or"), int_tag, "or");
-	builder->CreateStore(nan_boxing_ivalue, builder->CreateBitCast(union_ptr, int_ptr_type, "union_to_int_ptr"));
+	if (is_32bit) {
+		llvm::Value *int_tag = ConstantInt::get(int_type, INT_32_TAG);
+		llvm::Value *nan_boxing_ivalue = builder->CreateOr(value, int_tag, "or");
+		builder->CreateStore(nan_boxing_ivalue, builder->CreateBitCast(union_ptr, int_ptr_type, "union_to_int_ptr"));
+	} else {
+		llvm::Value *mask = ConstantInt::get(int_type, MASK);
+		llvm::Value *nan = ConstantInt::get(int_type, NaN);
+		llvm::Value *int_tag = ConstantInt::get(int_type, INT_TAG);
+		llvm::Value *nan_boxing_ivalue = builder->CreateOr(builder->CreateOr(builder->CreateAnd(value, mask, "and"), nan, "or"), int_tag, "or");
+		builder->CreateStore(nan_boxing_ivalue, builder->CreateBitCast(union_ptr, int_ptr_type, "union_to_int_ptr"));
+	}
 	return union_ptr;
 }
 

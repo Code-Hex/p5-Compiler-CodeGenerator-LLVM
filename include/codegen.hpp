@@ -79,7 +79,7 @@ typedef enum {
 #define FFI_32_TAG            (uint64_t)(0xfffffffc00000000)
 #define UNDEF_32_TAG          (uint64_t)(0xfffffffd00000000)
 
-#define INT_init(data) (void *)(uint64_t)((data & MASK) | NaN | INT_TAG)
+#define INT_init(data) (void *)((uint64_t)is_32bit ? (data | INT_32_TAG) : ((data & MASK) | NaN | INT_TAG))
 #define DOUBLE_init(data) (void *)&data
 #define STRING_init(data) (void *)((uint64_t)data | NaN | STRING_TAG)
 #define ARRAY_init(data) (void *)((uint64_t)data | NaN | ARRAY_TAG)

@@ -8,6 +8,7 @@ typedef union {
 #include "runtime_api_common_body.h"
 
 #define NaN                (uint64_t)(0x7FF8000000000000)
+#define _TYPE              (uint64_t)(0x0000000f00000000)
 #define INT_TAG            (uint64_t)(0xfffffff100000000)
 #define STRING_TAG         (uint64_t)(0xfffffff200000000)
 #define ARRAY_TAG          (uint64_t)(0xfffffff300000000)
@@ -22,7 +23,8 @@ typedef union {
 #define FFI_TAG            (uint64_t)(0xfffffffc00000000)
 #define UNDEF_TAG          (uint64_t)(0xfffffffd00000000)
 
-unsigned long long TYPE(uint64_t data);
+//unsigned long long TYPE(uint64_t data);
+#define TYPE(data) ((_TYPE & (uint64_t)data) >> 32)
 
 #define INT_init(data) ((uint32_t)data | INT_TAG)
 #define STRING_init(data) ((uint64_t)data | STRING_TAG)
